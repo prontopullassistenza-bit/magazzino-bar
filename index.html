@@ -52,7 +52,7 @@
         <button id="switchUserBtn" onclick="openLoginModal()"
           class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 active:scale-95 transition">
           <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span id="currentUserLabel">Ospite</span>
+          <span id="currentUserLabel">Scegli nome</span>
         </button>
       </div>
 
@@ -95,11 +95,11 @@
     </div>
   </header>
 
-  <!-- AVVISO CONFIGURAZIONE -->
-  <div id="configWarning" class="hidden max-w-2xl mx-auto px-4 mt-4">
-    <div class="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-sm text-amber-900">
-      <p class="font-bold">Mancano le chiavi Supabase</p>
-      <p class="mt-1">Apri <code class="bg-amber-100 px-1 rounded">index.html</code> e inserisci <b>SUPABASE_URL</b> e <b>SUPABASE_ANON_KEY</b> all'inizio dello script.</p>
+  <!-- AVVISO ERRORE / CONFIGURAZIONE -->
+  <div id="errorBanner" class="hidden max-w-2xl mx-auto px-4 mt-4">
+    <div class="bg-rose-50 border border-rose-300 rounded-2xl p-4 text-sm text-rose-900">
+      <p class="font-bold">Errore di connessione al database</p>
+      <p id="errorBannerText" class="mt-1 text-xs font-mono break-all"></p>
     </div>
   </div>
 
@@ -136,7 +136,7 @@
     <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl">
       <div class="flex items-center justify-between">
         <h3 id="productModalTitle" class="text-base font-bold">Nuovo prodotto</h3>
-        <button onclick="closeProductModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">×</button>
+        <button onclick="closeProductModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">&times;</button>
       </div>
       <form id="productForm" class="mt-4 space-y-3">
         <input type="hidden" id="editProductId" />
@@ -185,7 +185,7 @@
     <div class="bg-white w-full sm:max-w-md max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl p-5 shadow-xl">
       <div class="flex items-center justify-between pb-3 border-b border-zinc-100">
         <h3 class="text-base font-bold">Ultime modifiche</h3>
-        <button onclick="closeHistoryModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">×</button>
+        <button onclick="closeHistoryModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">&times;</button>
       </div>
       <div id="historyList" class="overflow-y-auto divide-y divide-zinc-100 mt-2 flex-1"></div>
     </div>
@@ -196,7 +196,7 @@
     <div class="bg-white w-full sm:max-w-md max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-2xl p-5 shadow-xl">
       <div class="flex items-center justify-between">
         <h3 class="text-base font-bold">Esporta per WhatsApp</h3>
-        <button onclick="closeWhatsAppModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">×</button>
+        <button onclick="closeWhatsAppModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">&times;</button>
       </div>
       <div class="grid grid-cols-2 gap-2 mt-3">
         <button id="waModeOrder" onclick="setWaMode('order')" class="py-2 text-xs font-semibold rounded-xl bg-zinc-900 text-white">
@@ -219,12 +219,8 @@
   <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 hidden bg-zinc-900 text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg"></div>
 
   <script>
-    // =========================================================================
-    // INCOLLA QUI LE TUE 2 CHIAVI PRESE DA SUPABASE (Project Settings -> API)
-    // =========================================================================
-    const SUPABASE_URL = 'https://ardoexgskfxgjrvulrjt.supabase.co/rest/v1/';
+    const SUPABASE_URL = 'https://ardoexgskfxgjrvulrjt.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_ErOtR1GfdJdozA1uo0d-TA_rJWdO_G2';
-    // =========================================================================
 
     const CATEGORIES = ['Tutti', 'Bibite', 'Succhi', 'Birre', 'Aperitivi', 'Liquori'];
 
@@ -234,15 +230,14 @@
     let historyItems = [];
     let currentUser = localStorage.getItem('bar_operator_name') || '';
     let activeCategory = 'Tutti';
-    let activeStatusFilter = null; // null | 'green' | 'yellow' | 'red'
+    let activeStatusFilter = null;
     let searchQuery = '';
     let waMode = 'order';
     const saveTimers = {};
 
-    // --- UTILITIES ---
     function esc(str) {
       return String(str ?? '').replace(/[&<>"']/g, m => ({
-        '&': '&', '<': '<', '>': '>', '"': '"', "'": '''
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       })[m]);
     }
 
@@ -252,6 +247,12 @@
       el.classList.remove('hidden');
       clearTimeout(el._t);
       el._t = setTimeout(() => el.classList.add('hidden'), 2000);
+    }
+
+    function showError(msg) {
+      document.getElementById('errorBannerText').textContent = msg;
+      document.getElementById('errorBanner').classList.remove('hidden');
+      setLiveBadge('offline');
     }
 
     function getPackSize(formato) {
@@ -325,18 +326,20 @@
       renderTabs();
       updateUserBadge();
 
-      if (!SUPABASE_URL.startsWith('http') || SUPABASE_ANON_KEY.includes('INCOLLA_QUI')) {
-        document.getElementById('configWarning').classList.remove('hidden');
-        setLiveBadge('offline');
-        return;
-      }
+      try {
+        if (!window.supabase) {
+          showError('Libreria Supabase non caricata. Ricarica la pagina.');
+          return;
+        }
+        db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        await Promise.all([loadProducts(), loadOperators(), loadHistory()]);
+        setupRealtime();
 
-      db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      await Promise.all([loadProducts(), loadOperators(), loadHistory()]);
-      setupRealtime();
-
-      if (!currentUser) {
-        openLoginModal();
+        if (!currentUser) {
+          openLoginModal();
+        }
+      } catch (err) {
+        showError(err?.message || String(err));
       }
     }
 
@@ -346,10 +349,10 @@
         .select('*')
         .order('nome', { ascending: true });
       if (error) {
-        setLiveBadge('offline');
-        showToast('Errore caricamento dati');
+        showError(error.message || 'Impossibile leggere la tabella prodotti');
         return;
       }
+      document.getElementById('errorBanner').classList.add('hidden');
       products = data || [];
       setLiveBadge('live');
       renderProducts();
@@ -375,7 +378,29 @@
       db.channel('magazzino-live')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, payload => {
           const rec = payload.new || payload.old;
-          if (rec && saveTimers[rec.id]) return; // ignora echo mentre sto salvando localmente
+          if (rec && saveTimers[rec.id]) return;
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            const idx = products.findIndex(p => p.id === payload.new.id);
+            if (idx !== -1) {
+              products[idx] = payload.new;
+              products.sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+              renderProducts();
+              return;
+            }
+          }
+          if (payload.eventType === 'INSERT' && payload.new) {
+            if (!products.some(p => p.id === payload.new.id)) {
+              products.push(payload.new);
+              products.sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+              renderProducts();
+              return;
+            }
+          }
+          if (payload.eventType === 'DELETE' && payload.old) {
+            products = products.filter(p => p.id !== payload.old.id);
+            renderProducts();
+            return;
+          }
           loadProducts();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'operatori' }, () => loadOperators())
@@ -411,15 +436,22 @@
       showToast(`Ciao ${currentUser}`);
     }
 
+    function selectOperatorByIndex(idx) {
+      const op = operators[idx];
+      if (op) selectOperator(op.nome);
+    }
+
     function renderOperatorButtons() {
       const box = document.getElementById('operatorButtons');
       if (!operators.length) {
         box.innerHTML = '<p class="text-xs text-zinc-400">Scrivi il tuo nome qui sotto per iniziare.</p>';
         return;
       }
-      box.innerHTML = operators.map(op => {
-        const active = op.nome === currentUser ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-zinc-50 text-zinc-800 border-zinc-200 hover:bg-zinc-100';
-        return `<button type="button" onclick="selectOperator('${esc(op.nome)}')"
+      box.innerHTML = operators.map((op, idx) => {
+        const active = op.nome === currentUser
+          ? 'bg-zinc-900 text-white border-zinc-900'
+          : 'bg-zinc-50 text-zinc-800 border-zinc-200 hover:bg-zinc-100';
+        return `<button type="button" onclick="selectOperatorByIndex(${idx})"
           class="px-3.5 py-2 rounded-xl border text-sm font-semibold active:scale-95 transition ${active}">
           ${esc(op.nome)}
         </button>`;
@@ -477,7 +509,6 @@
 
     // --- RENDER PRODOTTI ---
     function renderProducts() {
-      // Calcola conteggi semaforo sulla categoria selezionata (o su tutto)
       const byCat = activeCategory === 'Tutti'
         ? products
         : products.filter(p => p.categoria === activeCategory);
@@ -493,7 +524,6 @@
       document.getElementById('countYellow').textContent = y;
       document.getElementById('countRed').textContent = r;
 
-      // Evidenzia tasto filtro semaforo attivo
       ['green', 'yellow', 'red'].forEach(st => {
         const btn = document.getElementById('stat-' + st);
         if (activeStatusFilter === st) {
@@ -512,7 +542,6 @@
         banner.classList.add('hidden');
       }
 
-      // Applica filtri
       const filtered = byCat.filter(p => {
         if (activeStatusFilter && getStatus(p) !== activeStatusFilter) return false;
         if (searchQuery && !p.nome.toLowerCase().includes(searchQuery)) return false;
@@ -582,8 +611,7 @@
         `;
       } else {
         const pack = getPackSize(item.formato);
-        const total = item.casse * pack + item.sfusi;
-        let options = '';
+        let options = item.sfusi >= pack ? '<option value="" disabled selected>...</option>' : '';
         for (let i = 0; i < pack; i++) {
           options += `<option value="${i}" ${item.sfusi === i ? 'selected' : ''}>${i}</option>`;
         }
