@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Magazzino Bar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+  </style>
+</head>
+<body class="bg-zinc-100 text-zinc-900 min-h-screen pb-24">
+
+  <!-- MODALE LOGIN (SOLO NOME) -->
+  <div id="loginModal" class="fixed inset-0 z-50 bg-zinc-900/60 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl border border-zinc-200">
+      <h2 class="text-xl font-bold text-zinc-900">Chi sta aggiornando?</h2>
+      <p class="text-sm text-zinc-500 mt-1">Seleziona il tuo nome o aggiungilo una volta sola. Nessuna password richiesta.</p>
+
+      <div id="operatorButtons" class="flex flex-wrap gap-2 mt-4"></div>
+
+      <form id="newOperatorForm" class="mt-5 pt-4 border-t border-zinc-200 flex gap-2">
+        <input id="newOperatorInput" type="text" placeholder="Nuovo nome (es. Marco)" autocomplete="off"
+          class="flex-1 px-3 py-2.5 text-sm rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900" />
+        <button type="submit"
+          class="px-4 py-2.5 bg-zinc-900 text-white text-sm font-semibold rounded-xl active:scale-95 transition">
+          Entra
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- HEADER FISSO -->
+  <header class="sticky top-0 z-30 bg-white border-b border-zinc-200">
+    <div class="max-w-2xl mx-auto px-4 pt-3 pb-2.5">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <h1 class="text-lg font-bold tracking-tight truncate">Magazzino Bar</h1>
+          <span id="liveBadge" class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500">
+            <span class="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>Connessione...
+          </span>
+        </div>
+        <button id="switchUserBtn" onclick="openLoginModal()"
+          class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 active:scale-95 transition">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span id="currentUserLabel">Scegli nome</span>
+        </button>
+      </div>
+
+      <!-- CONTATORI SEMAFORO -->
+      <div class="grid grid-cols-3 gap-2 mt-3">
+        <button onclick="toggleStatusFilter('green')" id="stat-green"
+          class="flex items-center justify-between px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 text-left transition">
+          <span class="text-xs font-medium text-zinc-600 flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>OK
+          </span>
+          <span id="countGreen" class="text-sm font-bold text-zinc-900">0</span>
+        </button>
+        <button onclick="toggleStatusFilter('yellow')" id="stat-yellow"
+          class="flex items-center justify-between px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 text-left transition">
+          <span class="text-xs font-medium text-zinc-600 flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>Attenz.
+          </span>
+          <span id="countYellow" class="text-sm font-bold text-zinc-900">0</span>
+        </button>
+        <button onclick="toggleStatusFilter('red')" id="stat-red"
+          class="flex items-center justify-between px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 text-left transition">
+          <span class="text-xs font-medium text-zinc-600 flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Critico
+          </span>
+          <span id="countRed" class="text-sm font-bold text-zinc-900">0</span>
+        </button>
+      </div>
+
+      <!-- RICERCA -->
+      <div class="mt-2.5 relative">
+        <input id="searchInput" type="search" placeholder="Cerca bibita, gin, gelato, yogurt..."
+          class="w-full pl-9 pr-3 py-2 text-sm rounded-xl bg-zinc-100 border border-transparent focus:bg-white focus:border-zinc-300 focus:outline-none" />
+        <svg class="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10.5a7.5 7.5 0 0013.15 6.15z" />
+        </svg>
+      </div>
+
+      <!-- TAB CATEGORIE -->
+      <div id="categoryTabs" class="flex gap-1.5 overflow-x-auto no-scrollbar mt-2.5 pb-0.5"></div>
+    </div>
+  </header>
+
+  <!-- AVVISO ERRORE / CONFIGURAZIONE -->
+  <div id="errorBanner" class="hidden max-w-2xl mx-auto px-4 mt-4">
+    <div class="bg-rose-50 border border-rose-300 rounded-2xl p-4 text-sm text-rose-900">
+      <p class="font-bold">Errore di connessione al database</p>
+      <p id="errorBannerText" class="mt-1 text-xs font-mono break-all"></p>
+    </div>
+  </div>
+
+  <!-- LISTA PRODOTTI -->
+  <main class="max-w-2xl mx-auto px-4 pt-3">
+    <div id="activeFilterBanner" class="hidden mb-3 flex items-center justify-between bg-zinc-900 text-white text-xs px-3 py-2 rounded-xl">
+      <span id="activeFilterText"></span>
+      <button onclick="clearStatusFilter()" class="underline font-semibold">Mostra tutto</button>
+    </div>
+    <div id="productList" class="space-y-2.5"></div>
+    <div id="emptyState" class="hidden text-center py-12 text-zinc-400 text-sm">Nessun prodotto trovato.</div>
+  </main>
+
+  <!-- BARRA AZIONI IN BASSO -->
+  <nav class="fixed bottom-0 inset-x-0 z-30 bg-white border-t border-zinc-200 px-4 py-2.5">
+    <div class="max-w-2xl mx-auto grid grid-cols-3 gap-2">
+      <button onclick="openProductModal()"
+        class="py-2.5 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold active:scale-95 transition">
+        + Prodotto
+      </button>
+      <button onclick="openHistoryModal()"
+        class="py-2.5 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold active:scale-95 transition">
+        Storico
+      </button>
+      <button onclick="openWhatsAppModal()"
+        class="py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold active:scale-95 transition">
+        WhatsApp
+      </button>
+    </div>
+  </nav>
+
+  <!-- MODALE AGGIUNGI / MODIFICA PRODOTTO -->
+  <div id="productModal" class="fixed inset-0 z-50 bg-zinc-900/60 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl">
+      <div class="flex items-center justify-between">
+        <h3 id="productModalTitle" class="text-base font-bold">Nuovo prodotto</h3>
+        <button onclick="closeProductModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">&times;</button>
+      </div>
+      <form id="productForm" class="mt-4 space-y-3">
+        <input type="hidden" id="editProductId" />
+        <div>
+          <label class="block text-xs font-semibold text-zinc-600 mb-1">Nome prodotto</label>
+          <input id="prodName" type="text" required placeholder="es. Gin Mare, Pistacchio, Addensante..."
+            class="w-full px-3 py-2.5 text-sm rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-zinc-600 mb-1">Categoria</label>
+            <select id="prodCategory" class="w-full px-3 py-2.5 text-sm rounded-xl border border-zinc-300 bg-white">
+              <option value="Bibite">Bibite</option>
+              <option value="Succhi">Succhi</option>
+              <option value="Acqua">Acqua</option>
+              <option value="Birre">Birre</option>
+              <option value="Fusti">Fusti</option>
+              <option value="Aperitivi">Aperitivi</option>
+              <option value="Liquori">Liquori</option>
+              <option value="Speciali">Speciali</option>
+              <option value="Gelateria">Gelateria</option>
+              <option value="Yogurteria">Yogurteria</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-zinc-600 mb-1">Formato</label>
+            <select id="prodFormat" class="w-full px-3 py-2.5 text-sm rounded-xl border border-zinc-300 bg-white">
+              <option value="C24">Cassa da 24 (C24)</option>
+              <option value="C10">Cassa da 10 (C10)</option>
+              <option value="C6">Cassa da 6 (C6)</option>
+              <option value="CASSE">Solo casse (CASSE)</option>
+              <option value="Z">Numero pezzi (Z)</option>
+              <option value="B">Piena / Mezza / Fine (B)</option>
+              <option value="B3">Multi 3 tipi (B3)</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 pt-2">
+          <button type="button" id="deleteProdBtn" onclick="deleteCurrentProduct()"
+            class="hidden px-4 py-2.5 rounded-xl bg-rose-50 text-rose-600 text-sm font-semibold">
+            Elimina
+          </button>
+          <button type="submit"
+            class="flex-1 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold active:scale-95 transition">
+            Salva
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODALE STORICO -->
+  <div id="historyModal" class="fixed inset-0 z-50 bg-zinc-900/60 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full sm:max-w-md max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl p-5 shadow-xl">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-100">
+        <h3 class="text-base font-bold">Ultime modifiche</h3>
+        <button onclick="closeHistoryModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">&times;</button>
+      </div>
+      <div id="historyList" class="overflow-y-auto divide-y divide-zinc-100 mt-2 flex-1"></div>
+    </div>
+  </div>
+
+  <!-- MODALE WHATSAPP -->
+  <div id="whatsappModal" class="fixed inset-0 z-50 bg-zinc-900/60 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full sm:max-w-md max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-2xl p-5 shadow-xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold">Esporta per WhatsApp</h3>
+        <button onclick="closeWhatsAppModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none px-2">&times;</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <button id="waModeOrder" onclick="setWaMode('order')" class="py-2 text-xs font-semibold rounded-xl bg-zinc-900 text-white">
+          Solo da ordinare
+        </button>
+        <button id="waModeAll" onclick="setWaMode('all')" class="py-2 text-xs font-semibold rounded-xl bg-zinc-100 text-zinc-700">
+          Inventario completo
+        </button>
+      </div>
+      <textarea id="waPreview" readonly rows="10"
+        class="mt-3 w-full p-3 text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none"></textarea>
+      <button id="copyWaBtn" onclick="copyWhatsAppText()"
+        class="mt-3 w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold active:scale-95 transition">
+        Copia testo per WhatsApp
+      </button>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 hidden bg-zinc-900 text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg"></div>
+
+  <script>
+    const SUPABASE_URL = 'https://ardoexgskfxgjrvulrjt.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_ErOtR1GfdJdozA1uo0d-TA_rJWdO_G2';
+
+    const CATEGORIES = ['Tutti', 'Bibite', 'Succhi', 'Acqua', 'Birre', 'Fusti', 'Aperitivi', 'Liquori', 'Speciali', 'Gelateria', 'Yogurteria'];
+
+    let db = null;
+    let products = [];
+    let operators = [];
+    let historyItems = [];
+    let currentUser = localStorage.getItem('bar_operator_name') || '';
+    let activeCategory = 'Tutti';
+    let activeStatusFilter = null;
+    let searchQuery = '';
+    let waMode = 'order';
+    const saveTimers = {};
+
+    function esc(str) {
+      return String(str ?? '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[m]);
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.add('hidden'), 2000);
+    }
+
+    function showError(msg) {
+      document.getElementById('errorBannerText').textContent = msg;
+      document.getElementById('errorBanner').classList.remove('hidden');
+      setLiveBadge('offline');
+    }
+
+    function getPackSize(formato) {
+      if (formato === 'C24') return 24;
+      if (formato === 'C10') return 10;
+      if (formato === 'C6') return 6;
+      return 1;
+    }
+
+    function defaultB3Data() {
+      return {
+        Rotondo: { stato: 'intera', scorte: 0 },
+        Triangolo: { stato: 'intera', scorte: 0 },
+        Bastone: { stato: 'intera', scorte: 0 }
+      };
+    }
+
+    function parseB3(raw) {
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          return obj;
+        }
+      } catch {}
+      return defaultB3Data();
+    }
+
+    function getSubStatus(sub) {
+      if ((sub.scorte || 0) > 0) return 'green';
+      if (sub.stato === 'fine') return 'red';
+      if (sub.stato === 'mezza') return 'yellow';
+      return 'green';
+    }
+
+    function getStatus(item) {
+      if (item.categoria === 'Acqua' || item.formato === 'CASSE') {
+        return 'none';
+      }
+      if (item.formato === 'B3') {
+        const subMap = parseB3(item.stato_bottiglia);
+        const statuses = Object.values(subMap).map(getSubStatus);
+        if (statuses.includes('red')) return 'red';
+        if (statuses.includes('yellow')) return 'yellow';
+        return 'green';
+      }
+      if (item.formato === 'B') {
+        if ((item.casse || 0) > 0) return 'green';
+        if (item.stato_bottiglia === 'fine') return 'red';
+        if (item.stato_bottiglia === 'mezza') return 'yellow';
+        return 'green';
+      }
+      if (item.formato === 'Z') {
+        const qty = item.sfusi || 0;
+        if (qty <= 0) return 'red';
+        if (qty <= 2) return 'yellow';
+        return 'green';
+      }
+      const pack = getPackSize(item.formato);
+      const total = (item.casse || 0) * pack + (item.sfusi || 0);
+      if (item.formato === 'C24') {
+        if (total <= 6) return 'red';
+        if (total <= 12) return 'yellow';
+        return 'green';
+      }
+      if (item.formato === 'C10') {
+        if (total <= 2) return 'red';
+        if (total <= 5) return 'yellow';
+        return 'green';
+      }
+      if (item.formato === 'C6') {
+        if (total <= 1) return 'red';
+        if (total <= 3) return 'yellow';
+        return 'green';
+      }
+      return 'green';
+    }
+
+    function getBLabels(categoria) {
+      if (categoria === 'Fusti') {
+        return { top: 'In uso (collegato)', scorta: 'Pezzi di scorta (chiusi)', full: 'Pieno', half: 'A metà', end: 'Fine' };
+      }
+      if (categoria === 'Gelateria' || categoria === 'Yogurteria') {
+        return { top: 'Livello / In uso', scorta: 'Scorte chiuse (riserva)', full: 'Piena', half: 'Mezza', end: 'Fine' };
+      }
+      if (categoria === 'Speciali') {
+        return { top: 'Bottiglia al bancone', scorta: 'Bottiglie chiuse (scorta)', full: 'Piena', half: 'Mezza', end: 'Fine' };
+      }
+      return { top: 'Bottiglia al bancone', scorta: 'Bottiglie chiuse (scorta)', full: 'Intera', half: 'Mezza', end: 'Fine' };
+    }
+
+    function formatStockSummary(item) {
+      if (item.formato === 'B3') {
+        const subMap = parseB3(item.stato_bottiglia);
+        return Object.entries(subMap).map(([k, v]) => {
+          const lbl = v.stato === 'fine' ? 'Fine' : v.stato === 'mezza' ? 'Mezza' : 'Piena';
+          const sc = (v.scorte || 0) > 0 ? ` (+${v.scorte})` : '';
+          return `${k}: ${lbl}${sc}`;
+        }).join(' | ');
+      }
+      if (item.formato === 'B') {
+        const L = getBLabels(item.categoria);
+        const label = item.stato_bottiglia === 'fine' ? L.end : item.stato_bottiglia === 'mezza' ? L.half : L.full;
+        const scorta = item.casse > 0 ? ` + ${item.casse} scorta` : ' (0 scorte)';
+        const prefix = (item.categoria === 'Fusti' || item.categoria === 'Gelateria' || item.categoria === 'Yogurteria') ? 'In uso' : 'Bancone';
+        return `${prefix}: ${label}${scorta}`;
+      }
+      if (item.formato === 'Z') {
+        const q = item.sfusi || 0;
+        return q === 1 ? '1 pz' : `${q} pz`;
+      }
+      if (item.formato === 'CASSE') {
+        const c = item.casse || 0;
+        return c === 1 ? '1 cassa' : `${c} casse`;
+      }
+      const pack = getPackSize(item.formato);
+      const total = item.casse * pack + item.sfusi;
+      return `${item.casse} casse + ${item.sfusi} sfusi (${total} pz)`;
+    }
+
+    function formatTime(iso) {
+      if (!iso) return 'Mai';
+      const d = new Date(iso);
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      const hhmm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      if (sameDay) return `Oggi ${hhmm}`;
+      return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) + ' ' + hhmm;
+    }
+
+    function setLiveBadge(state) {
+      const el = document.getElementById('liveBadge');
+      if (state === 'live') {
+        el.className = 'inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700';
+        el.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Live';
+      } else {
+        el.className = 'inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full bg-rose-50 text-rose-700';
+        el.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Offline';
+      }
+    }
+
+    // --- INIT SUPABASE ---
+    async function init() {
+      renderTabs();
+      updateUserBadge();
+
+      try {
+        if (!window.supabase) {
+          showError('Libreria Supabase non caricata. Ricarica la pagina.');
+          return;
+        }
+        db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        await Promise.all([loadProducts(), loadOperators(), loadHistory()]);
+        setupRealtime();
+
+        if (!currentUser) {
+          openLoginModal();
+        }
+      } catch (err) {
+        showError(err?.message || String(err));
+      }
+    }
+
+    async function loadProducts() {
+      const { data, error } = await db
+        .from('prodotti')
+        .select('*')
+        .order('nome', { ascending: true });
+      if (error) {
+        showError(error.message || 'Impossibile leggere la tabella prodotti');
+        return;
+      }
+      document.getElementById('errorBanner').classList.add('hidden');
+      products = data || [];
+      setLiveBadge('live');
+      renderProducts();
+    }
+
+    async function loadOperators() {
+      const { data } = await db.from('operatori').select('*').order('nome', { ascending: true });
+      operators = data || [];
+      renderOperatorButtons();
+    }
+
+    async function loadHistory() {
+      const { data } = await db
+        .from('storico')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(40);
+      historyItems = data || [];
+      renderHistory();
+    }
+
+    function setupRealtime() {
+      db.channel('magazzino-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, payload => {
+          const rec = payload.new || payload.old;
+          if (rec && saveTimers[rec.id]) return;
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            const idx = products.findIndex(p => p.id === payload.new.id);
+            if (idx !== -1) {
+              products[idx] = payload.new;
+              products.sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+              renderProducts();
+              return;
+            }
+          }
+          if (payload.eventType === 'INSERT' && payload.new) {
+            if (!products.some(p => p.id === payload.new.id)) {
+              products.push(payload.new);
+              products.sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+              renderProducts();
+              return;
+            }
+          }
+          if (payload.eventType === 'DELETE' && payload.old) {
+            products = products.filter(p => p.id !== payload.old.id);
+            renderProducts();
+            return;
+          }
+          loadProducts();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operatori' }, () => loadOperators())
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'storico' }, () => loadHistory())
+        .subscribe(status => {
+          if (status === 'SUBSCRIBED') setLiveBadge('live');
+        });
+    }
+
+    // --- LOGIN (SOLO NOME) ---
+    function updateUserBadge() {
+      document.getElementById('currentUserLabel').textContent = currentUser || 'Scegli nome';
+    }
+
+    function openLoginModal() {
+      renderOperatorButtons();
+      const modal = document.getElementById('loginModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeLoginModal() {
+      const modal = document.getElementById('loginModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function selectOperator(name) {
+      currentUser = name.trim();
+      localStorage.setItem('bar_operator_name', currentUser);
+      updateUserBadge();
+      closeLoginModal();
+      showToast(`Ciao ${currentUser}`);
+    }
+
+    function selectOperatorByIndex(idx) {
+      const op = operators[idx];
+      if (op) selectOperator(op.nome);
+    }
+
+    function renderOperatorButtons() {
+      const box = document.getElementById('operatorButtons');
+      if (!operators.length) {
+        box.innerHTML = '<p class="text-xs text-zinc-400">Scrivi il tuo nome qui sotto per iniziare.</p>';
+        return;
+      }
+      box.innerHTML = operators.map((op, idx) => {
+        const active = op.nome === currentUser
+          ? 'bg-zinc-900 text-white border-zinc-900'
+          : 'bg-zinc-50 text-zinc-800 border-zinc-200 hover:bg-zinc-100';
+        return `<button type="button" onclick="selectOperatorByIndex(${idx})"
+          class="px-3.5 py-2 rounded-xl border text-sm font-semibold active:scale-95 transition ${active}">
+          ${esc(op.nome)}
+        </button>`;
+      }).join('');
+    }
+
+    document.getElementById('newOperatorForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const input = document.getElementById('newOperatorInput');
+      const raw = input.value.trim();
+      if (!raw) return;
+      const formatted = raw.charAt(0).toUpperCase() + raw.slice(1);
+      if (db) {
+        await db.from('operatori').upsert({ nome: formatted }, { onConflict: 'nome' });
+      }
+      input.value = '';
+      selectOperator(formatted);
+    });
+
+    // --- RENDER TABS & FILTRI ---
+    function renderTabs() {
+      const el = document.getElementById('categoryTabs');
+      el.innerHTML = CATEGORIES.map(cat => {
+        const isActive = cat === activeCategory;
+        const cls = isActive
+          ? 'bg-zinc-900 text-white'
+          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200';
+        return `<button onclick="setCategory('${cat}')"
+          class="shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition ${cls}">
+          ${cat}
+        </button>`;
+      }).join('');
+    }
+
+    function setCategory(cat) {
+      activeCategory = cat;
+      renderTabs();
+      renderProducts();
+    }
+
+    function toggleStatusFilter(st) {
+      activeStatusFilter = activeStatusFilter === st ? null : st;
+      renderProducts();
+    }
+
+    function clearStatusFilter() {
+      activeStatusFilter = null;
+      renderProducts();
+    }
+
+    document.getElementById('searchInput').addEventListener('input', e => {
+      searchQuery = e.target.value.trim().toLowerCase();
+      renderProducts();
+    });
+
+    // --- RENDER PRODOTTI ---
+    function renderProducts() {
+      const byCat = activeCategory === 'Tutti'
+        ? products
+        : products.filter(p => p.categoria === activeCategory);
+
+      let g = 0, y = 0, r = 0;
+      byCat.forEach(p => {
+        const s = getStatus(p);
+        if (s === 'green') g++;
+        else if (s === 'yellow') y++;
+        else if (s === 'red') r++;
+      });
+      document.getElementById('countGreen').textContent = g;
+      document.getElementById('countYellow').textContent = y;
+      document.getElementById('countRed').textContent = r;
+
+      ['green', 'yellow', 'red'].forEach(st => {
+        const btn = document.getElementById('stat-' + st);
+        if (activeStatusFilter === st) {
+          btn.classList.add('ring-2', 'ring-zinc-900', 'bg-white');
+        } else {
+          btn.classList.remove('ring-2', 'ring-zinc-900', 'bg-white');
+        }
+      });
+
+      const banner = document.getElementById('activeFilterBanner');
+      if (activeStatusFilter) {
+        const labels = { green: 'Solo prodotti OK', yellow: 'Solo prodotti in Attenzione', red: 'Solo prodotti Critici' };
+        document.getElementById('activeFilterText').textContent = labels[activeStatusFilter];
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+
+      const filtered = byCat.filter(p => {
+        if (activeStatusFilter && getStatus(p) !== activeStatusFilter) return false;
+        if (searchQuery) {
+          const inName = p.nome.toLowerCase().includes(searchQuery);
+          const inSub = p.formato === 'B3' && Object.keys(parseB3(p.stato_bottiglia)).some(k => k.toLowerCase().includes(searchQuery));
+          if (!inName && !inSub) return false;
+        }
+        return true;
+      });
+
+      const listEl = document.getElementById('productList');
+      const emptyEl = document.getElementById('emptyState');
+
+      if (!filtered.length) {
+        listEl.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+
+      listEl.innerHTML = filtered.map(item => renderCardHTML(item)).join('');
+    }
+
+    function renderCardHTML(item) {
+      const status = getStatus(item);
+      const hasSemaforo = status !== 'none';
+      const borderCol = status === 'red'
+        ? 'border-l-rose-500'
+        : status === 'yellow'
+        ? 'border-l-amber-400'
+        : status === 'green'
+        ? 'border-l-emerald-500'
+        : 'border-l-zinc-300';
+      const dotCol = status === 'red' ? 'bg-rose-500' : status === 'yellow' ? 'bg-amber-400' : 'bg-emerald-500';
+      const badgeCol = status === 'red'
+        ? 'bg-rose-50 text-rose-700'
+        : status === 'yellow'
+        ? 'bg-amber-50 text-amber-800'
+        : status === 'green'
+        ? 'bg-emerald-50 text-emerald-700'
+        : 'bg-zinc-100 text-zinc-800';
+
+      const metaText = item.ultimo_operatore
+        ? `${esc(item.ultimo_operatore)} · ${formatTime(item.ultimo_aggiornamento)}`
+        : 'Non ancora conteggiato';
+
+      let controlsHTML = '';
+
+      if (item.formato === 'B3') {
+        const subMap = parseB3(item.stato_bottiglia);
+        const rows = Object.entries(subMap).map(([subKey, subVal]) => {
+          const subSt = getSubStatus(subVal);
+          const subDot = subSt === 'red' ? 'bg-rose-500' : subSt === 'yellow' ? 'bg-amber-400' : 'bg-emerald-500';
+          const btnCls = (val, activeClasses) => subVal.stato === val
+            ? `${activeClasses} font-bold shadow-sm`
+            : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100 font-medium';
+          return `
+            <div class="bg-zinc-50 rounded-xl p-2.5 border border-zinc-100 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full ${subDot}"></span>
+                  <span class="text-xs font-bold text-zinc-800">${esc(subKey)}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[11px] text-zinc-400">Scorte</span>
+                  <button onclick="changeMultiScorta(${item.id}, '${esc(subKey)}', -1)"
+                    class="w-7 h-7 rounded-lg bg-white border border-zinc-200 text-sm font-bold active:scale-95 transition">−</button>
+                  <span class="w-5 text-center text-xs font-bold tabular-nums">${subVal.scorte || 0}</span>
+                  <button onclick="changeMultiScorta(${item.id}, '${esc(subKey)}', 1)"
+                    class="w-7 h-7 rounded-lg bg-zinc-900 text-white text-sm font-bold active:scale-95 transition">+</button>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button onclick="setMultiState(${item.id}, '${esc(subKey)}', 'intera')"
+                  class="py-2 rounded-lg text-xs transition active:scale-95 ${btnCls('intera', 'bg-emerald-600 text-white')}">
+                  Piena
+                </button>
+                <button onclick="setMultiState(${item.id}, '${esc(subKey)}', 'mezza')"
+                  class="py-2 rounded-lg text-xs transition active:scale-95 ${btnCls('mezza', 'bg-amber-400 text-zinc-900')}">
+                  Mezza
+                </button>
+                <button onclick="setMultiState(${item.id}, '${esc(subKey)}', 'fine')"
+                  class="py-2 rounded-lg text-xs transition active:scale-95 ${btnCls('fine', 'bg-rose-600 text-white')}">
+                  Fine
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        controlsHTML = `<div class="mt-3 space-y-2">${rows}</div>`;
+      } else if (item.formato === 'B') {
+        const L = getBLabels(item.categoria);
+        const btnCls = (val, activeClasses) => item.stato_bottiglia === val
+          ? `${activeClasses} font-bold shadow-sm`
+          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 font-medium';
+
+        controlsHTML = `
+          <div class="mt-3 space-y-2.5">
+            <div>
+              <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 mb-1.5">${L.top}</div>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button onclick="setBottleState(${item.id}, 'intera')"
+                  class="py-2.5 rounded-xl text-xs transition active:scale-95 ${btnCls('intera', 'bg-emerald-600 text-white')}">
+                  ${L.full}
+                </button>
+                <button onclick="setBottleState(${item.id}, 'mezza')"
+                  class="py-2.5 rounded-xl text-xs transition active:scale-95 ${btnCls('mezza', 'bg-amber-400 text-zinc-900')}">
+                  ${L.half}
+                </button>
+                <button onclick="setBottleState(${item.id}, 'fine')"
+                  class="py-2.5 rounded-xl text-xs transition active:scale-95 ${btnCls('fine', 'bg-rose-600 text-white')}">
+                  ${L.end}
+                </button>
+              </div>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-zinc-100">
+              <span class="text-xs font-medium text-zinc-600">${L.scorta}</span>
+              <div class="flex items-center gap-1.5">
+                <button onclick="changeCasse(${item.id}, -1)"
+                  class="w-10 h-10 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-lg font-bold active:scale-95 transition">−</button>
+                <span class="w-9 text-center text-base font-bold tabular-nums">${item.casse}</span>
+                <button onclick="changeCasse(${item.id}, 1)"
+                  class="w-10 h-10 rounded-xl bg-zinc-900 text-white text-lg font-bold active:scale-95 transition">+</button>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (item.formato === 'Z') {
+        controlsHTML = `
+          <div class="mt-3 bg-zinc-50 rounded-xl p-2.5 border border-zinc-100 flex items-center justify-between gap-3">
+            <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 pl-1">Quantità (pezzi)</span>
+            <div class="flex items-center gap-2">
+              <button onclick="changeSfusi(${item.id}, -1)"
+                class="w-11 h-11 rounded-xl bg-white border border-zinc-200 text-xl font-bold active:scale-95 transition">−</button>
+              <input type="number" inputmode="numeric" min="0" value="${item.sfusi}"
+                onchange="setSfusi(${item.id}, this.value)"
+                onfocus="this.select()"
+                class="w-16 h-11 text-center text-lg font-bold rounded-xl bg-white border border-zinc-200 focus:outline-none focus:border-zinc-900 tabular-nums" />
+              <button onclick="changeSfusi(${item.id}, 1)"
+                class="w-11 h-11 rounded-xl bg-zinc-900 text-white text-xl font-bold active:scale-95 transition">+</button>
+            </div>
+          </div>
+        `;
+      } else if (item.formato === 'CASSE') {
+        controlsHTML = `
+          <div class="mt-3 bg-zinc-50 rounded-xl p-2.5 border border-zinc-100 flex items-center justify-between gap-3">
+            <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 pl-1">Casse disponibili</span>
+            <div class="flex items-center gap-2">
+              <button onclick="changeCasse(${item.id}, -1)"
+                class="w-11 h-11 rounded-xl bg-white border border-zinc-200 text-xl font-bold active:scale-95 transition">−</button>
+              <input type="number" inputmode="numeric" min="0" value="${item.casse}"
+                onchange="setCasse(${item.id}, this.value)"
+                onfocus="this.select()"
+                class="w-16 h-11 text-center text-lg font-bold rounded-xl bg-white border border-zinc-200 focus:outline-none focus:border-zinc-900 tabular-nums" />
+              <button onclick="changeCasse(${item.id}, 1)"
+                class="w-11 h-11 rounded-xl bg-zinc-900 text-white text-xl font-bold active:scale-95 transition">+</button>
+            </div>
+          </div>
+        `;
+      } else {
+        const pack = getPackSize(item.formato);
+        let options = item.sfusi >= pack ? '<option value="" disabled selected>...</option>' : '';
+        for (let i = 0; i < pack; i++) {
+          options += `<option value="${i}" ${item.sfusi === i ? 'selected' : ''}>${i}</option>`;
+        }
+        const convertBtn = item.sfusi >= pack
+          ? `<button onclick="normalizeSfusi(${item.id})"
+              class="mt-2 w-full py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-semibold">
+              Converti ${item.sfusi} sfusi in +${Math.floor(item.sfusi / pack)} casse e ${item.sfusi % pack} sfusi
+            </button>`
+          : '';
+
+        controlsHTML = `
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <!-- CASSE -->
+            <div class="bg-zinc-50 rounded-xl p-2 border border-zinc-100">
+              <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 mb-1.5 text-center">Casse da ${pack}</div>
+              <div class="flex items-center justify-between gap-1">
+                <button onclick="changeCasse(${item.id}, -1)"
+                  class="w-10 h-10 rounded-xl bg-white border border-zinc-200 text-lg font-bold active:scale-95 transition">−</button>
+                <span class="text-lg font-bold tabular-nums">${item.casse}</span>
+                <button onclick="changeCasse(${item.id}, 1)"
+                  class="w-10 h-10 rounded-xl bg-zinc-900 text-white text-lg font-bold active:scale-95 transition">+</button>
+              </div>
+            </div>
+
+            <!-- SFUSI -->
+            <div class="bg-zinc-50 rounded-xl p-2 border border-zinc-100">
+              <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 mb-1.5 text-center">Sfusi (0–${pack - 1})</div>
+              <div class="flex items-center gap-1.5">
+                <input type="number" inputmode="numeric" min="0" value="${item.sfusi}"
+                  onchange="setSfusi(${item.id}, this.value)"
+                  onfocus="this.select()"
+                  class="w-full h-10 text-center text-base font-bold rounded-xl bg-white border border-zinc-200 focus:outline-none focus:border-zinc-900" />
+                <select onchange="setSfusi(${item.id}, this.value)" aria-label="Scegli sfusi"
+                  class="w-12 h-10 px-1 text-center text-xs font-semibold rounded-xl bg-white border border-zinc-200 focus:outline-none">
+                  ${options}
+                </select>
+              </div>
+            </div>
+          </div>
+          ${convertBtn}
+        `;
+      }
+
+      let rightBadge = '';
+      if (item.formato === 'B3') {
+        const subMap = parseB3(item.stato_bottiglia);
+        const statuses = Object.values(subMap).map(getSubStatus);
+        const reds = statuses.filter(s => s === 'red').length;
+        const yellows = statuses.filter(s => s === 'yellow').length;
+        if (reds > 0) rightBadge = `${reds} fine`;
+        else if (yellows > 0) rightBadge = `${yellows} metà`;
+        else rightBadge = '3/3 OK';
+      } else if (item.formato === 'B') {
+        const L = getBLabels(item.categoria);
+        rightBadge = item.casse > 0
+          ? `+${item.casse} scorta`
+          : (item.stato_bottiglia === 'fine' ? L.end : item.stato_bottiglia === 'mezza' ? L.half : 'OK');
+      } else if (item.formato === 'Z') {
+        rightBadge = `${item.sfusi || 0} pz`;
+      } else if (item.formato === 'CASSE') {
+        rightBadge = item.casse === 1 ? '1 cassa' : `${item.casse} casse`;
+      } else {
+        rightBadge = `${item.casse * getPackSize(item.formato) + item.sfusi} pz`;
+      }
+
+      const formatBadge = item.formato === 'B' && item.categoria === 'Fusti'
+        ? 'FUSTO'
+        : item.formato === 'B3'
+        ? '3 TIPI'
+        : item.formato;
+      const dotHTML = hasSemaforo ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 ${dotCol}"></span>` : '';
+      const metaPad = hasSemaforo ? 'pl-4' : '';
+
+      return `
+        <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-zinc-200 border-l-4 ${borderCol}">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                ${dotHTML}
+                <h3 class="font-bold text-zinc-900 text-[15px] truncate">${esc(item.nome)}</h3>
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 shrink-0">${formatBadge}</span>
+              </div>
+              <p class="text-[11px] text-zinc-400 mt-0.5 ${metaPad}">${esc(item.categoria)} · ${metaText}</p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="text-xs font-bold px-2.5 py-1 rounded-lg tabular-nums ${badgeCol}">${rightBadge}</span>
+              <button onclick="openProductModal(${item.id})" title="Modifica prodotto"
+                class="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          ${controlsHTML}
+        </div>
+      `;
+    }
+
+    // --- AGGIORNAMENTI PRODOTTO ---
+    function ensureUser() {
+      if (!currentUser) {
+        openLoginModal();
+        return false;
+      }
+      return true;
+    }
+
+    function changeCasse(id, delta) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      const next = Math.max(0, (item.casse || 0) + delta);
+      if (next === item.casse) return;
+      item.casse = next;
+      commitItemChange(item);
+    }
+
+    function setCasse(id, rawValue) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      const num = Math.max(0, parseInt(rawValue, 10) || 0);
+      item.casse = num;
+      commitItemChange(item);
+    }
+
+    function changeSfusi(id, delta) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      const next = Math.max(0, (item.sfusi || 0) + delta);
+      if (next === item.sfusi) return;
+      item.sfusi = next;
+      commitItemChange(item);
+    }
+
+    function setSfusi(id, rawValue) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      const num = Math.max(0, parseInt(rawValue, 10) || 0);
+      item.sfusi = num;
+      commitItemChange(item);
+    }
+
+    function normalizeSfusi(id) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      const pack = getPackSize(item.formato);
+      item.casse += Math.floor(item.sfusi / pack);
+      item.sfusi = item.sfusi % pack;
+      commitItemChange(item);
+    }
+
+    function setBottleState(id, state) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      item.stato_bottiglia = state;
+      commitItemChange(item);
+    }
+
+    function setMultiState(id, subKey, state) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      const subMap = parseB3(item.stato_bottiglia);
+      if (!subMap[subKey]) subMap[subKey] = { stato: 'intera', scorte: 0 };
+      subMap[subKey].stato = state;
+      item.stato_bottiglia = JSON.stringify(subMap);
+      commitItemChange(item);
+    }
+
+    function changeMultiScorta(id, subKey, delta) {
+      if (!ensureUser()) return;
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      const subMap = parseB3(item.stato_bottiglia);
+      if (!subMap[subKey]) subMap[subKey] = { stato: 'intera', scorte: 0 };
+      const next = Math.max(0, (subMap[subKey].scorte || 0) + delta);
+      if (next === subMap[subKey].scorte) return;
+      subMap[subKey].scorte = next;
+      item.stato_bottiglia = JSON.stringify(subMap);
+      commitItemChange(item);
+    }
+
+    function commitItemChange(item) {
+      item.ultimo_operatore = currentUser;
+      item.ultimo_aggiornamento = new Date().toISOString();
+      renderProducts();
+
+      clearTimeout(saveTimers[item.id]);
+      saveTimers[item.id] = setTimeout(async () => {
+        if (!db) return;
+        const { error } = await db
+          .from('prodotti')
+          .update({
+            casse: item.casse,
+            sfusi: item.sfusi,
+            stato_bottiglia: item.stato_bottiglia,
+            ultimo_operatore: currentUser,
+            ultimo_aggiornamento: item.ultimo_aggiornamento
+          })
+          .eq('id', item.id);
+
+        if (!error) {
+          await db.from('storico').insert({
+            prodotto_nome: item.nome,
+            operatore: currentUser,
+            dettaglio: formatStockSummary(item)
+          });
+        } else {
+          showToast('Errore salvataggio');
+        }
+        delete saveTimers[item.id];
+      }, 450);
+    }
+
+    // --- MODALE PRODOTTO (AGGIUNGI / MODIFICA / ELIMINA) ---
+    function openProductModal(id = null) {
+      if (!ensureUser()) return;
+      const modal = document.getElementById('productModal');
+      const deleteBtn = document.getElementById('deleteProdBtn');
+      if (id) {
+        const item = products.find(p => p.id === id);
+        document.getElementById('productModalTitle').textContent = 'Modifica prodotto';
+        document.getElementById('editProductId').value = item.id;
+        document.getElementById('prodName').value = item.nome;
+        document.getElementById('prodCategory').value = item.categoria;
+        document.getElementById('prodFormat').value = item.formato;
+        deleteBtn.classList.remove('hidden');
+      } else {
+        document.getElementById('productModalTitle').textContent = 'Nuovo prodotto';
+        document.getElementById('editProductId').value = '';
+        document.getElementById('prodName').value = '';
+        const defaultCat = activeCategory !== 'Tutti' ? activeCategory : 'Bibite';
+        document.getElementById('prodCategory').value = defaultCat;
+        const bCats = ['Fusti', 'Liquori', 'Speciali', 'Gelateria', 'Yogurteria'];
+        const defaultFmt = defaultCat === 'Acqua' ? 'CASSE' : bCats.includes(defaultCat) ? 'B' : 'C24';
+        document.getElementById('prodFormat').value = defaultFmt;
+        deleteBtn.classList.add('hidden');
+      }
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeProductModal() {
+      const modal = document.getElementById('productModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    document.getElementById('productForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!db) return;
+      const id = document.getElementById('editProductId').value;
+      const nome = document.getElementById('prodName').value.trim();
+      const categoria = document.getElementById('prodCategory').value;
+      const formato = document.getElementById('prodFormat').value;
+      if (!nome) return;
+
+      if (id) {
+        await db.from('prodotti').update({
+          nome, categoria, formato,
+          ultimo_operatore: currentUser,
+          ultimo_aggiornamento: new Date().toISOString()
+        }).eq('id', Number(id));
+        showToast('Prodotto aggiornato');
+      } else {
+        const initStato = formato === 'B3' ? JSON.stringify(defaultB3Data()) : 'intera';
+        await db.from('prodotti').insert({
+          nome, categoria, formato,
+          casse: 0, sfusi: 0, stato_bottiglia: initStato,
+          ultimo_operatore: currentUser,
+          ultimo_aggiornamento: new Date().toISOString()
+        });
+        showToast('Prodotto aggiunto');
+      }
+      closeProductModal();
+      loadProducts();
+    });
+
+    async function deleteCurrentProduct() {
+      const id = document.getElementById('editProductId').value;
+      if (!id || !db) return;
+      if (!confirm('Vuoi eliminare questo prodotto dall\'elenco?')) return;
+      await db.from('prodotti').delete().eq('id', Number(id));
+      closeProductModal();
+      showToast('Prodotto eliminato');
+      loadProducts();
+    }
+
+    // --- STORICO ---
+    function openHistoryModal() {
+      loadHistory();
+      const modal = document.getElementById('historyModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function renderHistory() {
+      const box = document.getElementById('historyList');
+      if (!historyItems.length) {
+        box.innerHTML = '<p class="text-xs text-zinc-400 py-6 text-center">Nessuna modifica registrata.</p>';
+        return;
+      }
+      box.innerHTML = historyItems.map(h => `
+        <div class="py-2.5 flex items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-zinc-900">${esc(h.prodotto_nome)}</p>
+            <p class="text-xs text-zinc-500">${esc(h.dettaglio)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <span class="text-xs font-bold text-zinc-800">${esc(h.operatore)}</span>
+            <p class="text-[11px] text-zinc-400">${formatTime(h.created_at)}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // --- WHATSAPP ---
+    function openWhatsAppModal() {
+      buildWhatsAppText();
+      const modal = document.getElementById('whatsappModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeWhatsAppModal() {
+      const modal = document.getElementById('whatsappModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function setWaMode(mode) {
+      waMode = mode;
+      document.getElementById('waModeOrder').className = mode === 'order'
+        ? 'py-2 text-xs font-semibold rounded-xl bg-zinc-900 text-white'
+        : 'py-2 text-xs font-semibold rounded-xl bg-zinc-100 text-zinc-700';
+      document.getElementById('waModeAll').className = mode === 'all'
+        ? 'py-2 text-xs font-semibold rounded-xl bg-zinc-900 text-white'
+        : 'py-2 text-xs font-semibold rounded-xl bg-zinc-100 text-zinc-700';
+      buildWhatsAppText();
+    }
+
+    function buildWhatsAppText() {
+      const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const time = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      const title = waMode === 'order' ? '*ORDINE / SCORTE BASSE BAR*' : '*INVENTARIO COMPLETO BAR*';
+      let lines = [`${title}`, `Aggiornato: ${today} alle ${time}${currentUser ? ` (${currentUser})` : ''}`, ''];
+
+      let count = 0;
+      CATEGORIES.filter(c => c !== 'Tutti').forEach(cat => {
+        const items = products.filter(p => {
+          if (p.categoria !== cat) return false;
+          if (waMode === 'order') {
+            const s = getStatus(p);
+            return s === 'yellow' || s === 'red';
+          }
+          return true;
+        });
+        if (!items.length) return;
+        lines.push(`*${cat.toUpperCase()}*`);
+        items.forEach(p => {
+          const s = getStatus(p);
+          const prefix = s === 'red' ? '🔴 ' : s === 'yellow' ? '🟡 ' : s === 'green' ? '🟢 ' : '• ';
+          lines.push(`${prefix}${p.nome}: ${formatStockSummary(p)}`);
+          count++;
+        });
+        lines.push('');
+      });
+
+      if (count === 0) {
+        lines.push('Tutto verde, niente da ordinare!');
+      }
+      document.getElementById('waPreview').value = lines.join('\n').trim();
+    }
+
+    async function copyWhatsAppText() {
+      const txt = document.getElementById('waPreview').value;
+      try {
+        await navigator.clipboard.writeText(txt);
+        showToast('Testo copiato! Incollalo su WhatsApp');
+      } catch {
+        document.getElementById('waPreview').select();
+        document.execCommand('copy');
+        showToast('Testo copiato!');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
